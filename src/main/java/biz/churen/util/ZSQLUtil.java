@@ -12,7 +12,7 @@ public class ZSQLUtil {
       Reader is = sc.getCharacterStream();
       BufferedReader br = new BufferedReader(is);
       String s = br.readLine();
-      StringBuffer sb = new StringBuffer();
+      StringBuilder sb = new StringBuilder();
       while (s != null) {
         sb.append(s);
         s = br.readLine();

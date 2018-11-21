@@ -3,6 +3,7 @@ package biz.churen;
 import biz.churen.db.ZDBPool;
 import biz.churen.handler.CommonHandler;
 import biz.churen.handler.IndexHandler;
+import biz.churen.handler.StockHandler;
 import biz.churen.role.ZRole;
 import io.javalin.Javalin;
 
@@ -17,9 +18,11 @@ public class Application {
     ZDBPool.init();
     app.before(ctx -> {});
     app.get("/", IndexHandler.indexHandler, roles(ZRole.ZRoleType.ANYONE));
+    app.get("/stock/spider/stock_list", StockHandler.stockList, roles(ZRole.ZRoleType.ANYONE));
+    app.get("/stock/spider/stock_history", StockHandler.stockHistory, roles(ZRole.ZRoleType.ANYONE));
     app.get("/*", CommonHandler.commonHandler);
     app.post("/*", CommonHandler.commonHandler);
     app.after(ctx -> {});
-    app.start(7000);
+    app.start(7001);
   }
 }

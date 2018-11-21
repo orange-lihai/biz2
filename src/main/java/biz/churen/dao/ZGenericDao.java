@@ -1,24 +1,24 @@
 package biz.churen.dao;
 
 import biz.churen.db.ZDBPool;
+import biz.churen.model.ITable;
 import biz.churen.model.ZQueryConfig;
+import biz.churen.model.annotation.ZColumnName;
 import biz.churen.model.annotation.ZPrimaryKey;
 import biz.churen.model.annotation.ZTable;
 import biz.churen.model.annotation.ZUniqueKey;
-import jdk.nashorn.internal.runtime.regexp.RegExp;
-import jdk.nashorn.internal.runtime.regexp.RegExpMatcher;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.time.DateFormatUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 
-import java.sql.SQLException;
+import java.lang.reflect.Field;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Setter @Getter
 @NoArgsConstructor
@@ -92,9 +92,9 @@ public class ZGenericDao<E> {
     if (null == parameters) { parameters = new HashMap<>(); }
     StringBuilder sql = new StringBuilder();
     String tableName = isVirtual ? queryConfig.getSql() : ((ZTable) clazz.getAnnotation(ZTable.class)).tableName();
-    sql.append("select ukt__.* from (")
-        .append(tableName)
-        .append(") ukt__ where 1 = 1");
+    sql.append("select ukt__.* from ").append(isVirtual ? "(" : "")
+        .append(tableName).append(isVirtual ? ")" : "")
+        .append(" ukt__ where 1 = 1");
     Stack<Pair<Pair<Integer, Integer>, String>> stack = new Stack<>();
     for (int i = 0; i < sql.length(); i++) {
       if ('{' == sql.charAt(i)) {
@@ -127,6 +127,51 @@ public class ZGenericDao<E> {
     /*if (sql.toString().contains("!{") || sql.toString().contains("#{")) {
       throw SQLException("SQL Error => " + sql.toString());
     }*/
-    return (List<E>) ZDBPool.query(ZDBPool.PoolName.WoXueApi, sql.toString(), this.clazz, limit);
+    return (List<E>) ZDBPool.query(ZDBPool.getDefaultPoolName(), sql.toString(), this.clazz, limit);
+  }
+
+  public static <U> int insertIfNotExists(U u) {
+    try {
+      Class z = u.getClass();
+      List<String> primaryKeys = Arrays.asList(((ZPrimaryKey) z.getAnnotation(ZPrimaryKey.class)).columnNames());
+      String tableName = ((ZTable) z.getDeclaredAnnotation(ZTable.class)).tableName();
+      List<String> columns = new ArrayList<>();
+      List<String> columnValues = new ArrayList<>();
+      for (Field f : z.getDeclaredFields()) {
+        String columnName = Optional.ofNullable(f.getDeclaredAnnotation(ZColumnName.class))
+            .map(ZColumnName::columnName).orElse(f.getName());
+        columns.add(columnName);
+        f.setAccessible(true);
+        Object o = f.get(u);
+        Object v = null == o ? "" : o;
+        if (o instanceof String) {
+          v = "'" + o + "' ";
+        }
+        if (o instanceof java.sql.Time) {
+          v = "DATE_FORMAT('" + DateFormatUtils.format((java.sql.Time) v, "HH:mm:ss") + "', '%h:%i:%s')";
+        } else if (o instanceof java.sql.Date) {
+          v = "DATE_FORMAT('" + DateFormatUtils.format((java.sql.Date) v, "yyyy-MM-dd") + "', '%Y-%m-%d')";
+        } else if (o instanceof java.sql.Timestamp) {
+          v = ((java.sql.Timestamp) v).getTime();
+        } else if (o instanceof java.util.Date) {
+          v = "DATE_FORMAT('" + DateFormatUtils.format((java.util.Date) v, "yyyy-MM-dd HH:mm:ss") + "', '%Y-%m-%d %h:%i:%s')";
+        }
+        columnValues.add(v.toString() + " " + columnName);
+      }
+      StringBuilder sql = new StringBuilder("insert into ").append(tableName)
+          .append("(").append(StringUtils.join(columns, ",")).append(")")
+          .append(" select ")
+          .append(columns.stream().map(m -> "s." + m).collect(Collectors.joining(",")))
+          .append(" from ")
+          .append("(")
+          .append(" select ").append(StringUtils.join(columnValues, ",")).append(" from dual")
+          .append(") s where not exists ( select 1 from ").append(tableName).append(" x where ")
+          .append(primaryKeys.stream().map(m -> "x." + m + " = " + "s." + m).collect(Collectors.joining(" and ")))
+          .append(")");
+      return ZDBPool.update(sql.toString());
+    } catch (Exception ex) {
+      log.error(ex.getLocalizedMessage());
+    }
+    return -1;
   }
 }

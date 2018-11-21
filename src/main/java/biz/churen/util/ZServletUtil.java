@@ -69,6 +69,16 @@ public class ZServletUtil {
     return rs;
   }
 
+  public static Map<String, String> getParameters(HttpServletRequest request) {
+    Map<String, String> rs = new HashMap<>();
+    Enumeration<String> names = request.getParameterNames();
+    while (names.hasMoreElements()) {
+      String k = names.nextElement();
+      rs.put(k, request.getParameter(k));
+    }
+    return rs;
+  }
+
   public static Map<String, ZParameterValue> getJsonParameters(HttpServletRequest request) {
     Map<String, ZParameterValue> rs = new HashMap<>();
     Map<String, Object> map = getJsonMap(request);

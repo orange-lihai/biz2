@@ -19,9 +19,11 @@ import java.util.Map;
 @Setter @Getter
 @Slf4j
 public class ZDBPool {
-  public final static int MAX_RECORD_SIZE = 1000;
+  public final static int MAX_RECORD_SIZE = 100000;
   public enum PoolName {
-    WoXueApi("WoXueApi", "/config/db/oracle-dev.properties");
+    WoXueApi("WoXueApi", "/config/db/oracle-dev.properties"),
+    SelfDB("WoXueApi", "/config/db/mysql-dev.properties")
+    ;
 
     String name;
     String fileName;
@@ -31,13 +33,16 @@ public class ZDBPool {
     }
   }
 
+  public static PoolName getDefaultPoolName() { return PoolName.SelfDB; }
+
+
   public static final Map<PoolName, HikariDataSource> pools = new HashMap<>();
 
   public static void init() {
     // Examines both filesystem and classpath for .properties file
-    HikariConfig config = new HikariConfig(PoolName.WoXueApi.fileName);
+    HikariConfig config = new HikariConfig(getDefaultPoolName().fileName);
     HikariDataSource ds = new HikariDataSource(config);
-    pools.put(PoolName.WoXueApi, ds);
+    pools.put(getDefaultPoolName(), ds);
   }
 
   public static  <E> E queryOne(PoolName poolName, String sql, Class<? extends E> clazz) {
@@ -95,5 +100,25 @@ public class ZDBPool {
       e.printStackTrace();
     }
     return list;
+  }
+
+  public static int update(String sql) {
+    log.info(sql);
+    return update(ZDBPool.getDefaultPoolName(), sql);
+  }
+
+  public static int update(PoolName poolName, String sql) {
+    int count = -1;
+    try (Connection conn = pools.get(poolName).getConnection();
+         Statement statement = conn.createStatement();
+    ) {
+      conn.setAutoCommit(false);
+      count = statement.executeUpdate(sql);
+      conn.commit();
+    } catch (SQLException e) {
+      log.error(e.getLocalizedMessage());
+      e.printStackTrace();
+    }
+    return count;
   }
 }
